@@ -2198,7 +2198,8 @@ function sortPlayersByStandings(list) {
 
 function playerName(pid) {
   const p = tournament.players.find(p => p.id === pid);
-  return p ? p.name : '(desconhecido)';
+  if (!p) return '(desconhecido)';
+  return p.withdrawn ? `${p.name} (W)` : p.name;
 }
 
 function handleBulkAdd() {
@@ -2363,11 +2364,12 @@ function exportRoundsResults() {
 function shareStandings() {
   const sorted = sortPlayersByStandings(getRankingList());
   const tbOrder = getActiveTiebreakOrder();
-  const headers = ['Pos','Nome','Rating','Título','Pontos'];
+  const headers = ['Pos','Nome','Rating','Título','Pontos','Status'];
   for (const k of tbOrder) headers.push(TIEBREAK_LABELS[k].abbr);
   const rows = [headers.join(';')];
   sorted.forEach((p, i) => {
-    const cols = [i+1, p.name, p.rating || '', p.title || '', p.points];
+    const status = p.withdrawn ? 'Desistente' : (p.lateEntry ? 'Entrada tardia' : '');
+    const cols = [i+1, p.name, p.rating || '', p.title || '', p.points, status];
     for (const k of tbOrder) cols.push(formatTBValue(getTiebreakValue(p.id, k)));
     rows.push(cols.join(';'));
   });
@@ -2714,7 +2716,7 @@ function renderPlayers() {
       if (!p.lateEntry) actionBtns += ` <button class="btn btn-outline btn-sm" onclick="lateEntryPlayer('${p.id}')" title="Entrada Tardia" style="color:#F59E0B;border-color:#F59E0B;">⏩</button>`;
       actionBtns += ` <button class="btn btn-outline btn-sm" onclick="withdrawPlayer('${p.id}')" title="Desistência" style="color:#EF4444;border-color:#EF4444;">🚪</button>`;
     }
-    actionBtns += ` <button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">🗑</button>`;
+    if (!p.withdrawn) actionBtns += ` <button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">🗑</button>`;
     const rowStyle = p.withdrawn ? ' style="opacity:0.5;"' : '';
     return `<tr${rowStyle}>
       <td><div class="rank-badge rank-n">${p.pairingNumber || idx+1}</div></td>
