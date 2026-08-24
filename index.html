@@ -141,6 +141,19 @@
     }
 
     /* =============================================
+       SPECTATOR VIEW
+       ============================================= */
+    #spectator-view {
+      position: fixed;
+      inset: 0;
+      z-index: 1001;
+      background: var(--bg-base);
+      overflow-y: auto;
+    }
+    #spectator-view .matchup-card { pointer-events: none; }
+    #spectator-view .matchup-actions { display: none !important; }
+
+    /* =============================================
        LOGIN SCREEN
        ============================================= */
     #login-screen {
@@ -1161,6 +1174,26 @@
 <div id="toast-container"></div>
 
 <!-- LOGIN SCREEN -->
+<!-- SPECTATOR VIEW (public link) -->
+<div id="spectator-view" style="display:none;">
+  <div class="chess-bg" id="spectator-chess-bg"></div>
+  <div style="max-width:960px;margin:0 auto;padding:24px 16px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <span class="piece" style="font-size:2.5rem;">♛</span>
+      <h1 style="font-family:'Cinzel',serif;color:var(--gold);margin:4px 0;" id="spectator-title">Torneio</h1>
+      <p style="color:var(--text-secondary);font-size:0.85rem;" id="spectator-subtitle"></p>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+      <button class="btn btn-gold btn-sm" id="spectator-tab-pairings" onclick="spectatorTab('pairings')">♟️ Rodadas</button>
+      <button class="btn btn-outline btn-sm" id="spectator-tab-standings" onclick="spectatorTab('standings')">🏆 Classificação</button>
+    </div>
+    <div id="spectator-content"></div>
+    <div style="text-align:center;margin-top:32px;color:var(--text-muted);font-size:0.75rem;">
+      Gambito — Plataforma de Torneios de Xadrez
+    </div>
+  </div>
+</div>
+
 <div id="login-screen">
   <!-- Chess board background -->
   <div class="chess-bg" id="chess-bg-grid"></div>
@@ -1227,6 +1260,7 @@
       <button class="sidebar-btn" onclick="exportJSON()">💾 Exportar JSON</button>
       <button class="sidebar-btn" onclick="exportRoundsResults()">📋 Exportar Resultados</button>
       <button class="sidebar-btn" onclick="shareStandings()">📊 Classificação (txt)</button>
+      <button class="sidebar-btn" onclick="copyPublicLink()">🔗 Link Público</button>
     </div>
   </aside>
 
@@ -2924,11 +2958,265 @@ function renderTiebreakConfig() {
 }
 
 /* =========================================================
+   PUBLIC LINK / SPECTATOR MODE
+   ========================================================= */
+let spectatorCurrentTab = 'pairings';
+let spectatorRoundIndex = 0;
+
+function copyPublicLink() {
+  if (!tournament.players.length) {
+    toast('warning', 'Sem dados', 'Cadastre jogadores e gere rodadas primeiro.');
+    return;
+  }
+  // Build compact data: only what's needed for display
+  const data = {
+    n: tournament.name,
+    s: tournament.system,
+    tr: tournament.totalRounds,
+    pw: tournament.pointsWin,
+    pd: tournament.pointsDraw,
+    pl: tournament.pointsLoss,
+    p: tournament.players.map(pl => ({
+      i: pl.id, n: pl.name, r: pl.rating || 0, t: pl.title || '',
+      w: pl.withdrawn || false, le: pl.lateEntry || false, ler: pl.lateEntryRound || 0
+    })),
+    rd: tournament.rounds.map(rnd => ({
+      num: rnd.number,
+      pairs: rnd.pairs.map(pr => {
+        if (pr.bye) return { b: pr.bye };
+        return { w: pr.white, k: pr.black, res: pr.result || '' };
+      })
+    })),
+    ci: tournament.currentRoundIndex,
+    tc: tournament.tiebreakCriteria,
+    te: tournament.tiebreakEnabled
+  };
+  const json = JSON.stringify(data);
+  const encoded = btoa(unescape(encodeURIComponent(json)));
+  const url = location.origin + location.pathname + '?v=' + encoded;
+  navigator.clipboard.writeText(url).then(() => {
+    toast('success', 'Link copiado!', 'Compartilhe o link para que outros acompanhem rodadas e classificação.');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('success', 'Link copiado!', 'Compartilhe o link para que outros acompanhem rodadas e classificação.');
+  });
+}
+
+function trySpectatorMode() {
+  const params = new URLSearchParams(location.search);
+  const v = params.get('v');
+  if (!v) return false;
+  try {
+    const json = decodeURIComponent(escape(atob(v)));
+    const data = JSON.parse(json);
+    // Load into tournament object
+    tournament.name = data.n || 'Torneio';
+    tournament.system = data.s || 'swiss';
+    tournament.totalRounds = data.tr || 5;
+    tournament.pointsWin = data.pw ?? 1;
+    tournament.pointsDraw = data.pd ?? 0.5;
+    tournament.pointsLoss = data.pl ?? 0;
+    tournament.players = data.p.map(pl => ({
+      id: pl.i, name: pl.n, rating: pl.r, title: pl.t,
+      withdrawn: pl.w || false, lateEntry: pl.le || false, lateEntryRound: pl.ler || 0,
+      pairingNumber: 0
+    }));
+    tournament.rounds = data.rd.map(rnd => ({
+      number: rnd.num,
+      pairs: rnd.pairs.map(pr => {
+        if (pr.b) return { bye: pr.b };
+        return { white: pr.w, black: pr.k, result: pr.res || null };
+      })
+    }));
+    tournament.currentRoundIndex = data.ci || 0;
+    tournament.tiebreakCriteria = data.tc || ['buchholz','buchholzCut1','sonnebornBerger','wins','gamesBlack','directEncounter'];
+    tournament.tiebreakEnabled = data.te || {};
+    ensureTiebreakDefaults();
+    spectatorRoundIndex = tournament.rounds.length - 1;
+    // Show spectator view
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('spectator-view').style.display = 'block';
+    document.getElementById('spectator-title').textContent = tournament.name;
+    const completedRounds = tournament.rounds.filter(r => r.pairs.every(p => p.bye || p.result)).length;
+    document.getElementById('spectator-subtitle').textContent =
+      `${tournament.system === 'roundrobin' ? 'Round Robin' : 'Suíço'} — ${tournament.rounds.length} rodada${tournament.rounds.length !== 1 ? 's' : ''} (${completedRounds} finalizada${completedRounds !== 1 ? 's' : ''}) — ${tournament.players.filter(p => !p.withdrawn).length} jogadores`;
+    spectatorTab('pairings');
+    return true;
+  } catch(e) {
+    console.error('Spectator data error:', e);
+    return false;
+  }
+}
+
+function spectatorTab(tab) {
+  spectatorCurrentTab = tab;
+  document.getElementById('spectator-tab-pairings').className = `btn ${tab === 'pairings' ? 'btn-gold' : 'btn-outline'} btn-sm`;
+  document.getElementById('spectator-tab-standings').className = `btn ${tab === 'standings' ? 'btn-gold' : 'btn-outline'} btn-sm`;
+  if (tab === 'pairings') renderSpectatorPairings();
+  else renderSpectatorStandings();
+}
+
+function renderSpectatorPairings() {
+  const content = document.getElementById('spectator-content');
+  if (!tournament.rounds.length) {
+    content.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px;">Nenhuma rodada gerada ainda.</div>';
+    return;
+  }
+  let html = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;justify-content:center;">';
+  tournament.rounds.forEach((rnd, ri) => {
+    const isActive = ri === spectatorRoundIndex;
+    html += `<button class="btn ${isActive ? 'btn-gold' : 'btn-outline'} btn-sm" onclick="spectatorShowRound(${ri})">R${rnd.number}</button>`;
+  });
+  html += '</div>';
+
+  tournament.rounds.forEach((rnd, ri) => {
+    const isActive = ri === spectatorRoundIndex;
+    const completed = rnd.pairs.every(p => p.bye || p.result);
+    html += `<div id="spec-round-${ri}" style="${isActive ? '' : 'display:none;'}">`;
+    html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;justify-content:center;">
+      <div class="section-title" style="margin:0;">Rodada ${rnd.number}</div>
+      ${completed ? '<span class="status-chip chip-done">Finalizada</span>' : '<span class="status-chip chip-active">Em andamento</span>'}
+    </div>`;
+    html += '<div class="pairings-list">';
+    rnd.pairs.forEach((pair, pi) => {
+      if (pair.bye) {
+        const bp = tournament.players.find(p => p.id === pair.bye);
+        html += `<div class="glass-card no-hover matchup-card">
+          <div class="matchup-board-no">BYE</div>
+          <div style="flex:1;color:var(--text-secondary);font-size:0.875rem;">
+            ${bp ? `<div class="player-info"><div class="player-avatar">${bp.name[0]}</div><span class="player-name-cell">${bp.name}</span></div>` : ''}
+          </div>
+          <div style="color:var(--status-win);font-size:0.8rem;font-weight:600;">✓ BYE (${tournament.pointsWin} pt)</div>
+        </div>`;
+      } else {
+        const pw = tournament.players.find(p => p.id === pair.white);
+        const pb = tournament.players.find(p => p.id === pair.black);
+        const result = pair.result;
+        let wscore = null, bscore = null;
+        let wclass = 'score-empty', bclass = 'score-empty';
+        if (result === '1-0')       { wscore = '1'; bscore = '0'; wclass='score-win'; bclass='score-loss'; }
+        else if (result === '0-1')  { wscore = '0'; bscore = '1'; wclass='score-loss'; bclass='score-win'; }
+        else if (result === '0.5-0.5') { wscore = '½'; bscore = '½'; wclass='score-draw'; bclass='score-draw'; }
+        html += `<div class="glass-card no-hover matchup-card">
+          <div class="matchup-board-no">${pi+1}</div>
+          <div class="matchup-player">
+            <div class="matchup-color-dot white"></div>
+            <div>
+              <div class="matchup-name">${pw ? pw.name : '?'} ${pw?.title ? `<span class="player-title-badge">${pw.title}</span>` : ''}</div>
+              <div class="matchup-rating">${pw ? (pw.rating || '-') : '-'}</div>
+            </div>
+          </div>
+          <div class="matchup-vs">
+            <span class="vs-label">VS</span>
+            <div class="matchup-score">
+              <div class="score-box ${wclass}">${wscore !== null ? wscore : ''}</div>
+              <div class="score-dash">—</div>
+              <div class="score-box ${bclass}">${bscore !== null ? bscore : ''}</div>
+            </div>
+          </div>
+          <div class="matchup-player right">
+            <div class="matchup-color-dot black"></div>
+            <div style="text-align:right;">
+              <div class="matchup-name">${pb ? pb.name : '?'} ${pb?.title ? `<span class="player-title-badge">${pb.title}</span>` : ''}</div>
+              <div class="matchup-rating">${pb ? (pb.rating || '-') : '-'}</div>
+            </div>
+          </div>
+        </div>`;
+      }
+    });
+    html += '</div></div>';
+  });
+  content.innerHTML = html;
+}
+
+function spectatorShowRound(ri) {
+  spectatorRoundIndex = ri;
+  renderSpectatorPairings();
+}
+
+function renderSpectatorStandings() {
+  const content = document.getElementById('spectator-content');
+  if (!tournament.players.length) {
+    content.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px;">Nenhum jogador cadastrado.</div>';
+    return;
+  }
+  ensureTiebreakDefaults();
+  const list = getRankingList();
+  const sorted = sortPlayersByStandings(list);
+  const tbOrder = getActiveTiebreakOrder();
+  const currentRatings = computeCurrentRatings();
+  const totalRounds = tournament.system === 'roundrobin'
+    ? (tournament.players.length % 2 === 0 ? tournament.players.length - 1 : tournament.players.length)
+    : tournament.totalRounds;
+
+  let header = `<th>#</th><th>Jogador</th><th class="mono">Pts</th><th>Progresso</th><th class="mono">Rating</th>`;
+  tbOrder.forEach(k => { header += `<th class="mono">${TIEBREAK_LABELS[k].abbr}</th>`; });
+
+  let rows = '';
+  sorted.forEach((p, i) => {
+    const badge = i < 3 ? `rank-${i+1}` : 'rank-n';
+    const pct = Math.min(100, (p.points / Math.max(1, totalRounds)) * 100);
+    const cr = currentRatings[p.id] || p.rating || 1500;
+    const delta = cr - (p.rating || 1500);
+    const deltaHtml = delta > 0 ? `<span class="rating-delta delta-pos">+${delta}</span>`
+                    : delta < 0 ? `<span class="rating-delta delta-neg">${delta}</span>`
+                    : `<span class="rating-delta delta-zero">±0</span>`;
+    let tbCells = '';
+    tbOrder.forEach(k => {
+      const v = getTiebreakValue(p.id, k);
+      tbCells += `<td class="mono text-muted">${formatTBValue(v)}</td>`;
+    });
+    let rowStyle = '';
+    if (i === 0) rowStyle = 'background:linear-gradient(90deg,rgba(255,215,0,0.04),transparent);';
+    else if (i === 1) rowStyle = 'background:linear-gradient(90deg,rgba(192,192,192,0.03),transparent);';
+    else if (i === 2) rowStyle = 'background:linear-gradient(90deg,rgba(205,127,50,0.03),transparent);';
+    let statusBadge = '';
+    if (p.withdrawn) statusBadge = `<span style="background:#EF4444;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.6rem;margin-left:4px;">W</span>`;
+    else if (p.lateEntry) statusBadge = `<span style="background:#F59E0B;color:#000;padding:1px 5px;border-radius:3px;font-size:0.6rem;margin-left:4px;">ET</span>`;
+    if (p.withdrawn) rowStyle += 'opacity:0.55;';
+    rows += `<tr style="${rowStyle}">
+      <td><div class="rank-badge ${badge}">${i+1}</div></td>
+      <td>
+        <div class="player-info">
+          <div class="player-avatar">${p.name[0].toUpperCase()}</div>
+          <div>
+            <div class="player-name-cell">${p.name}${p.title ? ` <span class="player-title-badge">${p.title}</span>` : ''}${statusBadge}</div>
+          </div>
+        </div>
+      </td>
+      <td class="mono" style="font-weight:700;color:var(--text-primary);">${p.points}</td>
+      <td>
+        <div class="pts-bar-wrap">
+          <div class="pts-bar"><div class="pts-bar-fill" style="width:${pct}%"></div></div>
+          <span class="text-muted" style="font-size:0.7rem;white-space:nowrap;">${pct.toFixed(0)}%</span>
+        </div>
+      </td>
+      <td class="mono">${cr} ${deltaHtml}</td>
+      ${tbCells}
+    </tr>`;
+  });
+
+  content.innerHTML = `<div class="table-wrapper"><table>
+    <thead><tr>${header}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+/* =========================================================
    BOOTSTRAP
    ========================================================= */
 buildChessBackground();
 
-if (tryRestoreSession()) {
+// Check for spectator mode first
+if (trySpectatorMode()) {
+  // Spectator mode active — do nothing else
+} else if (tryRestoreSession()) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   initApp();
