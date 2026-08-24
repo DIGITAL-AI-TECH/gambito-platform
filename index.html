@@ -275,6 +275,28 @@
     .btn-primary:hover { box-shadow: 0 4px 20px rgba(245,166,35,0.4); transform: translateY(-1px); }
     .btn-primary:active { transform: translateY(0); }
 
+    .btn-subscribe {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 12px 20px;
+      background: #25D366;
+      color: #fff;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+    .btn-subscribe:hover {
+      background: #1ebe57;
+      box-shadow: 0 4px 16px rgba(37,211,102,0.35);
+      transform: translateY(-1px);
+    }
+    .btn-subscribe:active { transform: translateY(0); }
+
     /* =============================================
        MAIN APP LAYOUT
        ============================================= */
@@ -1161,6 +1183,10 @@
       </div>
       <button type="submit" class="btn-primary">Entrar</button>
     </form>
+    <a id="btn-subscribe" class="btn-subscribe" href="#" target="_blank" rel="noopener">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.612.616l4.534-1.468A11.956 11.956 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.233 0-4.305-.726-5.992-1.96l-.418-.313-2.691.871.894-2.632-.344-.548A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+      Faça sua assinatura
+    </a>
   </div>
 </div>
 
@@ -1387,20 +1413,49 @@
 
 <script>
 /* =========================================================
+   CONFIGURAÇÕES DA PLATAFORMA
+   ========================================================= */
+const PLATFORM_CONFIG = {
+  subscriptionMonths: 12,
+  whatsappNumber: '5564981337424',
+  whatsappMessage: 'Olá! Gostaria de assinar/renovar minha assinatura do Gambito.',
+};
+
+/* =========================================================
    SISTEMA DE AUTENTICAÇÃO — USUÁRIOS CADASTRADOS
    Para adicionar novos usuários, basta incluir um novo objeto
-   no array abaixo com: username, password, name, role
+   no array abaixo com: username, password, name, role, subscriptionDate
+
+   subscriptionDate: data de início da assinatura (formato ISO: 'YYYY-MM-DD')
+   A assinatura expira após PLATFORM_CONFIG.subscriptionMonths meses.
+   Para acesso sem expiração, use subscriptionDate: null
    ========================================================= */
 const USERS = [
-  { username: 'admin',   password: 'gambito2026', name: 'Administrador',  role: 'admin' },
-  { username: 'matheus', password: 'chess123',    name: 'Matheus Terra',  role: 'admin' },
-  { username: 'arbitro', password: 'fide2026',    name: 'Árbitro',        role: 'user'  },
+  { username: 'admin',   password: 'gambito2026', name: 'Administrador',  role: 'admin', subscriptionDate: null },
+  { username: 'matheus', password: 'chess123',    name: 'Matheus Terra',  role: 'admin', subscriptionDate: null },
+  { username: 'arbitro', password: 'fide2026',    name: 'Árbitro',        role: 'user',  subscriptionDate: '2026-08-01' },
 ];
 
 /* =========================================================
    SESSION MANAGEMENT
    ========================================================= */
 let currentUser = null;
+
+function isSubscriptionExpired(user) {
+  if (!user.subscriptionDate) return false;
+  const start = new Date(user.subscriptionDate + 'T00:00:00');
+  const expiry = new Date(start);
+  expiry.setMonth(expiry.getMonth() + PLATFORM_CONFIG.subscriptionMonths);
+  return new Date() > expiry;
+}
+
+function getExpiryDate(user) {
+  if (!user.subscriptionDate) return null;
+  const start = new Date(user.subscriptionDate + 'T00:00:00');
+  const expiry = new Date(start);
+  expiry.setMonth(expiry.getMonth() + PLATFORM_CONFIG.subscriptionMonths);
+  return expiry;
+}
 
 function doLogin(e) {
   e.preventDefault();
@@ -1409,6 +1464,12 @@ function doLogin(e) {
   const found = USERS.find(u => u.username === uname && u.password === pass);
   if (!found) {
     toast('danger', 'Acesso negado', 'Usuário ou senha incorretos.');
+    return;
+  }
+  if (isSubscriptionExpired(found)) {
+    const expiry = getExpiryDate(found);
+    const expiryStr = expiry.toLocaleDateString('pt-BR');
+    toast('danger', 'Assinatura expirada', 'Sua assinatura venceu em ' + expiryStr + '. Entre em contato pelo WhatsApp para renovar.');
     return;
   }
   currentUser = found;
@@ -1551,6 +1612,15 @@ function buildChessBackground() {
     }
   }
 }
+
+function initSubscribeButton() {
+  const btn = document.getElementById('btn-subscribe');
+  if (btn) {
+    const msg = encodeURIComponent(PLATFORM_CONFIG.whatsappMessage);
+    btn.href = 'https://wa.me/' + PLATFORM_CONFIG.whatsappNumber + '?text=' + msg;
+  }
+}
+initSubscribeButton();
 
 /* =========================================================
    PLAYER FORM HELPERS
