@@ -2227,8 +2227,12 @@ function handleBulkAdd() {
 function deletePlayer(pid) {
   const p = tournament.players.find(pl => pl.id === pid);
   if (!p) return;
-  if (tournament.rounds.length === 0) {
-    // No rounds yet — safe to fully remove
+  // Check if this player appears in ANY round (even if rounds array is somehow empty but player was paired)
+  const appearsInRound = tournament.rounds.some(rnd =>
+    rnd.pairs.some(pair => pair.white === pid || pair.black === pid || pair.bye === pid)
+  );
+  if (tournament.rounds.length === 0 && !appearsInRound) {
+    // No rounds yet and player never appeared — safe to fully remove
     if (!confirm('Remover este jogador?')) return;
     tournament.players = tournament.players.filter(pl => pl.id !== pid);
     saveState();
@@ -2236,7 +2240,7 @@ function deletePlayer(pid) {
     toast('success', 'Removido', 'Jogador removido.');
     return;
   }
-  // Tournament in progress — withdraw instead of delete
+  // Tournament in progress — NEVER delete, only withdraw
   withdrawPlayer(pid);
 }
 
@@ -2244,9 +2248,10 @@ function withdrawPlayer(pid) {
   const p = tournament.players.find(pl => pl.id === pid);
   if (!p) return;
   if (p.withdrawn) { toast('warning', 'Atenção', `${p.name} já foi desistente.`); return; }
-  if (!confirm(`Desistência: ${p.name} sairá do torneio a partir da próxima rodada. Os pontos e pareamentos anteriores serão preservados. Confirmar?`)) return;
+  if (!confirm(`Desistência: ${p.name} sairá do torneio a partir da próxima rodada.\n\n• Resultados e pareamentos anteriores serão PRESERVADOS\n• Adversários que jogaram com ele mantêm seus pontos\n• Ele não será pareado nas rodadas seguintes\n\nConfirmar?`)) return;
   p.withdrawn = true;
   p.withdrawnAtRound = tournament.currentRoundIndex + 1; // next round onwards
+  // IMPORTANT: Do NOT modify tournament.rounds — all previous pairings and results stay intact
   saveState();
   refreshAll();
   toast('success', 'Desistência registrada', `${p.name} saiu do torneio. Rodadas anteriores preservadas.`);
@@ -2792,6 +2797,8 @@ function renderPairings() {
       } else {
         const pw = tournament.players.find(p => p.id === pair.white);
         const pb = tournament.players.find(p => p.id === pair.black);
+        const pwBadge = pw?.withdrawn ? ' <span style="background:#EF4444;color:#fff;padding:0 4px;border-radius:3px;font-size:0.55rem;vertical-align:middle;">W</span>' : '';
+        const pbBadge = pb?.withdrawn ? ' <span style="background:#EF4444;color:#fff;padding:0 4px;border-radius:3px;font-size:0.55rem;vertical-align:middle;">W</span>' : '';
         const result = pair.result;
         let wscore = null, bscore = null;
         let wclass = 'score-empty', bclass = 'score-empty';
@@ -2803,7 +2810,7 @@ function renderPairings() {
           <div class="matchup-player">
             <div class="matchup-color-dot white"></div>
             <div>
-              <div class="matchup-name">${pw ? pw.name : '?'} ${pw?.title ? `<span class="player-title-badge">${pw.title}</span>` : ''}</div>
+              <div class="matchup-name">${pw ? pw.name : '?'}${pwBadge} ${pw?.title ? `<span class="player-title-badge">${pw.title}</span>` : ''}</div>
               <div class="matchup-rating">${pw ? (pw.rating || '-') : '-'}</div>
             </div>
           </div>
@@ -2818,7 +2825,7 @@ function renderPairings() {
           <div class="matchup-player right">
             <div class="matchup-color-dot black"></div>
             <div style="text-align:right;">
-              <div class="matchup-name">${pb ? pb.name : '?'} ${pb?.title ? `<span class="player-title-badge">${pb.title}</span>` : ''}</div>
+              <div class="matchup-name">${pb ? pb.name : '?'}${pbBadge} ${pb?.title ? `<span class="player-title-badge">${pb.title}</span>` : ''}</div>
               <div class="matchup-rating">${pb ? (pb.rating || '-') : '-'}</div>
             </div>
           </div>
@@ -3098,6 +3105,8 @@ function renderSpectatorPairings() {
       } else {
         const pw = tournament.players.find(p => p.id === pair.white);
         const pb = tournament.players.find(p => p.id === pair.black);
+        const pwBadge = pw?.withdrawn ? ' <span style="background:#EF4444;color:#fff;padding:0 4px;border-radius:3px;font-size:0.55rem;vertical-align:middle;">W</span>' : '';
+        const pbBadge = pb?.withdrawn ? ' <span style="background:#EF4444;color:#fff;padding:0 4px;border-radius:3px;font-size:0.55rem;vertical-align:middle;">W</span>' : '';
         const result = pair.result;
         let wscore = null, bscore = null;
         let wclass = 'score-empty', bclass = 'score-empty';
@@ -3109,7 +3118,7 @@ function renderSpectatorPairings() {
           <div class="matchup-player">
             <div class="matchup-color-dot white"></div>
             <div>
-              <div class="matchup-name">${pw ? pw.name : '?'} ${pw?.title ? `<span class="player-title-badge">${pw.title}</span>` : ''}</div>
+              <div class="matchup-name">${pw ? pw.name : '?'}${pwBadge} ${pw?.title ? `<span class="player-title-badge">${pw.title}</span>` : ''}</div>
               <div class="matchup-rating">${pw ? (pw.rating || '-') : '-'}</div>
             </div>
           </div>
@@ -3124,7 +3133,7 @@ function renderSpectatorPairings() {
           <div class="matchup-player right">
             <div class="matchup-color-dot black"></div>
             <div style="text-align:right;">
-              <div class="matchup-name">${pb ? pb.name : '?'} ${pb?.title ? `<span class="player-title-badge">${pb.title}</span>` : ''}</div>
+              <div class="matchup-name">${pb ? pb.name : '?'}${pbBadge} ${pb?.title ? `<span class="player-title-badge">${pb.title}</span>` : ''}</div>
               <div class="matchup-rating">${pb ? (pb.rating || '-') : '-'}</div>
             </div>
           </div>
