@@ -244,8 +244,8 @@
     }
     .float-group input:focus + label,
     .float-group input:not(:placeholder-shown) + label {
-      top: 10px;
-      font-size: 0.7rem;
+      top: 4px;
+      font-size: 0.65rem;
       color: var(--accent-gold);
       transform: translateY(0);
     }
@@ -1316,6 +1316,8 @@
         <div class="page-header-actions">
           <button class="btn btn-gold" onclick="addPlayerPrompt()">➕ Adicionar</button>
           <button class="btn btn-outline" onclick="showBulkAdd()">📋 Cadastro em Lote</button>
+          <button class="btn btn-outline" onclick="importPlayersCSV()">📥 Importar CSV</button>
+          <button class="btn btn-outline" onclick="exportPlayersCSV()">📤 Exportar CSV</button>
         </div>
       </div>
       <div id="add-player-form-wrap" class="glass-card no-hover mb-16 hidden" style="padding:20px;">
@@ -1367,7 +1369,7 @@
       <div class="page-header">
         <div class="page-header-title">Classificação</div>
         <div class="page-header-actions">
-          <button class="btn btn-outline" onclick="shareStandings()">📋 Exportar</button>
+          <button class="btn btn-outline" onclick="shareStandings()">📤 Exportar CSV</button>
         </div>
       </div>
       <div id="standings-content"></div>
@@ -2257,23 +2259,78 @@ function exportRoundsResults() {
 function shareStandings() {
   const sorted = sortPlayersByStandings(getRankingList());
   const tbOrder = getActiveTiebreakOrder();
-  let text = `CLASSIFICAÇÃO — ${tournament.name || 'Torneio'}\n`;
-  text += `Rodada ${tournament.currentRoundIndex + 1} de ${tournament.totalRounds}\n`;
-  text += '='.repeat(50) + '\n';
+  const headers = ['Pos','Nome','Rating','Título','Pontos'];
+  for (const k of tbOrder) headers.push(TIEBREAK_LABELS[k].abbr);
+  const rows = [headers.join(';')];
   sorted.forEach((p, i) => {
-    text += `${padLeft(i+1, 3)}. ${padRight(p.name, 22)} ${padLeft(p.points, 5)} pts`;
-    for (const k of tbOrder) {
-      const v = getTiebreakValue(p.id, k);
-      text += ` | ${TIEBREAK_LABELS[k].abbr}: ${formatTBValue(v)}`;
-    }
-    text += '\n';
+    const cols = [i+1, p.name, p.rating || '', p.title || '', p.points];
+    for (const k of tbOrder) cols.push(formatTBValue(getTiebreakValue(p.id, k)));
+    rows.push(cols.join(';'));
   });
-  const blob = new Blob([text], { type: 'text/plain' });
+  const csv = '\uFEFF' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = `gambito_classificacao_${tournament.name || 'torneio'}.txt`;
+  a.href = url; a.download = `gambito_classificacao_${tournament.name || 'torneio'}.csv`;
   a.click(); URL.revokeObjectURL(url);
-  toast('success', 'Exportado', 'Classificação salva.');
+  toast('success', 'CSV exportado', 'Classificação salva como CSV.');
+}
+
+function exportPlayersCSV() {
+  const headers = ['Nome','Rating','Título'];
+  const rows = [headers.join(';')];
+  tournament.players.forEach(p => {
+    rows.push([p.name, p.rating || '', p.title || ''].join(';'));
+  });
+  const csv = '\uFEFF' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `gambito_jogadores_${tournament.name || 'torneio'}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('success', 'CSV exportado', 'Lista de jogadores salva como CSV.');
+}
+
+function importPlayersCSV() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.txt';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      let added = 0, skipped = 0;
+      const existingNames = new Set(tournament.players.map(p => p.name.toLowerCase()));
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (!line) continue;
+        // Detecta separador: ponto-e-vírgula ou vírgula
+        const sep = line.includes(';') ? ';' : ',';
+        const parts = line.split(sep).map(s => s.trim());
+        let name = parts[0], rating = parts[1], title = parts[2];
+        // Pula header
+        if (i === 0 && name.toLowerCase() === 'nome') continue;
+        if (!name) { skipped++; continue; }
+        // Pula duplicata
+        if (existingNames.has(name.toLowerCase())) { skipped++; continue; }
+        const r = parseInt(rating) || 0;
+        const t = title || '';
+        const pn = nextPairingNumber();
+        const id = 'p' + Date.now() + Math.random().toString(36).substr(2, 4);
+        tournament.players.push({ id, name, rating: Math.max(0, r), title: t, pairingNumber: pn });
+        existingNames.add(name.toLowerCase());
+        added++;
+      }
+      saveState();
+      renderPlayers();
+      toast('success', 'Importação concluída', `${added} jogador(es) adicionado(s)${skipped ? ', ' + skipped + ' ignorado(s)' : ''}.`);
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+  input.click();
 }
 
 function newTournament() {
