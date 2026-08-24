@@ -282,7 +282,7 @@
       gap: 8px;
       margin-top: 16px;
       padding: 12px 20px;
-      background: #25D366;
+      background: linear-gradient(135deg, #25D366, #128C7E);
       color: #fff;
       border-radius: var(--radius-md);
       text-decoration: none;
@@ -291,7 +291,7 @@
       transition: all 0.2s ease;
     }
     .btn-subscribe:hover {
-      background: #1ebe57;
+      background: linear-gradient(135deg, #128C7E, #075E54);
       box-shadow: 0 4px 16px rgba(37,211,102,0.35);
       transform: translateY(-1px);
     }
@@ -1183,9 +1183,9 @@
       </div>
       <button type="submit" class="btn-primary">Entrar</button>
     </form>
-    <a id="btn-subscribe" class="btn-subscribe" href="#" target="_blank" rel="noopener">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.612.616l4.534-1.468A11.956 11.956 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.233 0-4.305-.726-5.992-1.96l-.418-.313-2.691.871.894-2.632-.344-.548A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-      Faça sua assinatura
+    <a id="btn-subscribe" class="btn-subscribe" href="#" target="_blank">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Assinar / Renovar
     </a>
   </div>
 </div>
@@ -1419,8 +1419,11 @@
    ========================================================= */
 const PLATFORM_CONFIG = {
   subscriptionMonths: 12,
-  whatsappNumber: '5564981337424',
+  whatsappNumber: '5567984593337',
   whatsappMessage: 'Olá! Gostaria de assinar/renovar minha assinatura do Gambito.',
+  contactEmail: 'contato@gambito.com.br',
+  emailSubject: 'Gambito — Assinatura / Renovação',
+  emailBody: 'Olá! Gostaria de assinar/renovar minha assinatura do Gambito.\n\nNome: \nUsuário: ',
 };
 
 /* =========================================================
@@ -1471,7 +1474,7 @@ function doLogin(e) {
   if (isSubscriptionExpired(found)) {
     const expiry = getExpiryDate(found);
     const expiryStr = expiry.toLocaleDateString('pt-BR');
-    toast('danger', 'Assinatura expirada', 'Sua assinatura venceu em ' + expiryStr + '. Entre em contato pelo WhatsApp para renovar.');
+    toast('danger', 'Assinatura expirada', 'Sua assinatura venceu em ' + expiryStr + '. Entre em contato por WhatsApp para renovar.');
     return;
   }
   currentUser = found;
@@ -1767,6 +1770,10 @@ function getRankingList() {
   ensureTiebreakDefaults();
   const list = tournament.players.map(p => {
     let pts = 0, wins = 0, blackGames = 0, winsWithBlack = 0;
+    // Add late entry points (½ point per missed round)
+    if (p.lateEntry && p.lateEntryPoints) {
+      pts += p.lateEntryPoints;
+    }
     for (const rnd of tournament.rounds) {
       for (const pair of rnd.pairs) {
         if (pair.bye === p.id) { pts += tournament.pointsWin; wins++; break; }
@@ -1920,7 +1927,14 @@ function pairScoreGroup(group, floaters) {
 }
 
 function generateSwissPairings() {
-  const list = getRankingList().sort((a,b) => {
+  const nextRoundNum = tournament.currentRoundIndex + 2; // 1-based round about to be generated
+  const list = getRankingList().filter(p => {
+    // Exclude withdrawn players
+    if (p.withdrawn) return false;
+    // Exclude late entry players who haven't entered yet
+    if (p.lateEntry && nextRoundNum <= (p.lateEntryAtRound || 0)) return false;
+    return true;
+  }).sort((a,b) => {
     if (b.points !== a.points) return b.points - a.points;
     if ((b.rating||0) !== (a.rating||0)) return (b.rating||0) - (a.rating||0);
     return (a.pairingNumber||0) - (b.pairingNumber||0);
@@ -1987,18 +2001,24 @@ function generateRoundRobinRoundPairings(roundIdx) {
     tournament.rrSchedule = buildRoundRobinSchedule(tournament.players);
   }
   const rawPairs = tournament.rrSchedule[roundIdx] || [];
+  const withdrawnIds = new Set(tournament.players.filter(p => p.withdrawn).map(p => p.id));
   return rawPairs.map(p => {
     if (p.bye) return { bye: p.bye, result: null };
+    const wW = withdrawnIds.has(p.white), wB = withdrawnIds.has(p.black);
+    if (wW && wB) return null; // both withdrawn, skip
+    if (wW) return { bye: p.black, result: null }; // white withdrew, black gets bye
+    if (wB) return { bye: p.white, result: null }; // black withdrew, white gets bye
     return { white: p.white, black: p.black, result: null };
-  });
+  }).filter(Boolean);
 }
 
 function generateNextRound() {
+  const activePlayers = tournament.players.filter(p => !p.withdrawn);
   const totalRounds = tournament.system === 'roundrobin'
     ? (tournament.players.length % 2 === 0 ? tournament.players.length - 1 : tournament.players.length)
     : tournament.totalRounds;
-  if (tournament.players.length < 2) {
-    toast('warning', 'Atenção', 'Cadastre ao menos 2 jogadores.');
+  if (activePlayers.length < 2) {
+    toast('warning', 'Atenção', 'Cadastre ao menos 2 jogadores ativos.');
     return;
   }
   if (tournament.currentRoundIndex >= totalRounds - 1) {
@@ -2170,15 +2190,59 @@ function handleBulkAdd() {
 }
 
 function deletePlayer(pid) {
-  if (!confirm('Remover este jogador?')) return;
-  tournament.players = tournament.players.filter(p => p.id !== pid);
-  // Remove from rounds
-  tournament.rounds.forEach(rnd => {
-    rnd.pairs = rnd.pairs.filter(pair => pair.white !== pid && pair.black !== pid && pair.bye !== pid);
-  });
+  const p = tournament.players.find(pl => pl.id === pid);
+  if (!p) return;
+  if (tournament.rounds.length === 0) {
+    // No rounds yet — safe to fully remove
+    if (!confirm('Remover este jogador?')) return;
+    tournament.players = tournament.players.filter(pl => pl.id !== pid);
+    saveState();
+    renderPlayers();
+    toast('success', 'Removido', 'Jogador removido.');
+    return;
+  }
+  // Tournament in progress — withdraw instead of delete
+  withdrawPlayer(pid);
+}
+
+function withdrawPlayer(pid) {
+  const p = tournament.players.find(pl => pl.id === pid);
+  if (!p) return;
+  if (p.withdrawn) { toast('warning', 'Atenção', `${p.name} já foi desistente.`); return; }
+  if (!confirm(`Desistência: ${p.name} sairá do torneio a partir da próxima rodada. Os pontos e pareamentos anteriores serão preservados. Confirmar?`)) return;
+  p.withdrawn = true;
+  p.withdrawnAtRound = tournament.currentRoundIndex + 1; // next round onwards
   saveState();
-  renderPlayers();
-  toast('success', 'Removido', 'Jogador removido.');
+  refreshAll();
+  toast('success', 'Desistência registrada', `${p.name} saiu do torneio. Rodadas anteriores preservadas.`);
+}
+
+function lateEntryPlayer(pid) {
+  const p = tournament.players.find(pl => pl.id === pid);
+  if (!p) return;
+  if (p.lateEntry) { toast('warning', 'Atenção', `${p.name} já está marcado como entrada tardia.`); return; }
+  if (tournament.rounds.length === 0) { toast('warning', 'Atenção', 'Nenhuma rodada gerada ainda. Não é necessário marcar entrada tardia.'); return; }
+  const missedRounds = tournament.currentRoundIndex + 1;
+  if (!confirm(`Entrada tardia: ${p.name} receberá ½ ponto para cada uma das ${missedRounds} rodada(s) anteriores. Confirmar?`)) return;
+  p.lateEntry = true;
+  p.lateEntryAtRound = tournament.currentRoundIndex + 1; // enters from next round
+  p.lateEntryPoints = missedRounds * (tournament.pointsDraw || 0.5);
+  saveState();
+  refreshAll();
+  toast('success', 'Entrada tardia registrada', `${p.name} entra no torneio com ${p.lateEntryPoints} ponto(s) das ${missedRounds} rodada(s) anteriores.`);
+}
+
+function reactivatePlayer(pid) {
+  const p = tournament.players.find(pl => pl.id === pid);
+  if (!p) return;
+  if (p.withdrawn) {
+    if (!confirm(`Reativar ${p.name} no torneio?`)) return;
+    delete p.withdrawn;
+    delete p.withdrawnAtRound;
+    saveState();
+    refreshAll();
+    toast('success', 'Reativado', `${p.name} voltou ao torneio.`);
+  }
 }
 
 function editPlayer(pid) {
@@ -2593,28 +2657,40 @@ function renderPlayers() {
     return;
   }
   const currentRatings = computeCurrentRatings();
+  const hasRounds = tournament.rounds.length > 0;
   const rows = tournament.players.map((p, idx) => {
     const cr = currentRatings[p.id] || p.rating || 1500;
     const delta = cr - (p.rating || 1500);
     const deltaHtml = delta > 0 ? `<span class="rating-delta delta-pos">+${delta}</span>`
                     : delta < 0 ? `<span class="rating-delta delta-neg">${delta}</span>`
                     : `<span class="rating-delta delta-zero">±0</span>`;
-    return `<tr>
+    let statusBadge = '';
+    if (p.withdrawn) statusBadge = `<span style="background:#EF4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:0.65rem;margin-left:6px;">DESISTENTE</span>`;
+    else if (p.lateEntry) statusBadge = `<span style="background:#F59E0B;color:#000;padding:1px 6px;border-radius:4px;font-size:0.65rem;margin-left:6px;">ENTRADA TARDIA (R${p.lateEntryAtRound + 1}+)</span>`;
+    let actionBtns = `<button class="btn btn-outline btn-sm" onclick="editPlayer('${p.id}')">✏️</button>`;
+    if (p.withdrawn) {
+      actionBtns += ` <button class="btn btn-outline btn-sm" onclick="reactivatePlayer('${p.id}')" title="Reativar">↩️</button>`;
+    } else if (hasRounds) {
+      if (!p.lateEntry) actionBtns += ` <button class="btn btn-outline btn-sm" onclick="lateEntryPlayer('${p.id}')" title="Entrada Tardia" style="color:#F59E0B;border-color:#F59E0B;">⏩</button>`;
+      actionBtns += ` <button class="btn btn-outline btn-sm" onclick="withdrawPlayer('${p.id}')" title="Desistência" style="color:#EF4444;border-color:#EF4444;">🚪</button>`;
+    }
+    actionBtns += ` <button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">🗑</button>`;
+    const rowStyle = p.withdrawn ? ' style="opacity:0.5;"' : '';
+    return `<tr${rowStyle}>
       <td><div class="rank-badge rank-n">${p.pairingNumber || idx+1}</div></td>
       <td>
         <div class="player-info">
           <div class="player-avatar">${p.name[0].toUpperCase()}</div>
           <div>
-            <div class="player-name-cell">${p.name}${p.title ? ` <span class="player-title-badge">${p.title}</span>` : ''}</div>
+            <div class="player-name-cell">${p.name}${p.title ? ` <span class="player-title-badge">${p.title}</span>` : ''}${statusBadge}</div>
           </div>
         </div>
       </td>
       <td class="mono">${p.rating || '-'}</td>
       <td class="mono">${cr} ${deltaHtml}</td>
       <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-outline btn-sm" onclick="editPlayer('${p.id}')">✏️ Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">🗑</button>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${actionBtns}
         </div>
       </td>
     </tr>`;
@@ -2775,13 +2851,17 @@ function renderStandings() {
     if (i === 0) rowStyle = 'background:linear-gradient(90deg,rgba(255,215,0,0.04),transparent);';
     else if (i === 1) rowStyle = 'background:linear-gradient(90deg,rgba(192,192,192,0.03),transparent);';
     else if (i === 2) rowStyle = 'background:linear-gradient(90deg,rgba(205,127,50,0.03),transparent);';
+    let statusBadge = '';
+    if (p.withdrawn) statusBadge = `<span style="background:#EF4444;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.6rem;margin-left:4px;">W</span>`;
+    else if (p.lateEntry) statusBadge = `<span style="background:#F59E0B;color:#000;padding:1px 5px;border-radius:3px;font-size:0.6rem;margin-left:4px;">ET</span>`;
+    if (p.withdrawn) rowStyle += 'opacity:0.55;';
     rows += `<tr style="${rowStyle}">
       <td><div class="rank-badge ${badge}">${i+1}</div></td>
       <td>
         <div class="player-info">
           <div class="player-avatar">${p.name[0].toUpperCase()}</div>
           <div>
-            <div class="player-name-cell">${p.name}${p.title ? ` <span class="player-title-badge">${p.title}</span>` : ''}</div>
+            <div class="player-name-cell">${p.name}${p.title ? ` <span class="player-title-badge">${p.title}</span>` : ''}${statusBadge}</div>
           </div>
         </div>
       </td>
