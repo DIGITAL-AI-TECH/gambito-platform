@@ -2037,14 +2037,43 @@ function generateRoundRobinRoundPairings(roundIdx) {
   }
   const rawPairs = tournament.rrSchedule[roundIdx] || [];
   const withdrawnIds = new Set(tournament.players.filter(p => p.withdrawn).map(p => p.id));
-  return rawPairs.map(p => {
-    if (p.bye) return { bye: p.bye, result: null };
+  const result = [];
+  const includedWithdrawn = new Set();
+  rawPairs.forEach(p => {
+    if (p.bye) {
+      if (withdrawnIds.has(p.bye)) {
+        // Withdrawn player had a BYE in the schedule — show as W.O.
+        result.push({ bye: p.bye, result: 'wo' });
+        includedWithdrawn.add(p.bye);
+      } else {
+        result.push({ bye: p.bye, result: null });
+      }
+      return;
+    }
     const wW = withdrawnIds.has(p.white), wB = withdrawnIds.has(p.black);
-    if (wW && wB) return null; // both withdrawn, skip
-    if (wW) return { bye: p.black, result: null }; // white withdrew, black gets bye
-    if (wB) return { bye: p.white, result: null }; // black withdrew, white gets bye
-    return { white: p.white, black: p.black, result: null };
-  }).filter(Boolean);
+    if (wW && wB) {
+      // Both withdrawn — add both as W.O. so round size doesn't shrink
+      result.push({ bye: p.white, result: 'wo' });
+      result.push({ bye: p.black, result: 'wo' });
+      includedWithdrawn.add(p.white);
+      includedWithdrawn.add(p.black);
+      return;
+    }
+    if (wW) {
+      result.push({ bye: p.black, result: null }); // black gets BYE (win)
+      result.push({ bye: p.white, result: 'wo' }); // white gets W.O. (0 pts)
+      includedWithdrawn.add(p.white);
+      return;
+    }
+    if (wB) {
+      result.push({ bye: p.white, result: null }); // white gets BYE (win)
+      result.push({ bye: p.black, result: 'wo' }); // black gets W.O. (0 pts)
+      includedWithdrawn.add(p.black);
+      return;
+    }
+    result.push({ white: p.white, black: p.black, result: null });
+  });
+  return result;
 }
 
 function generateNextRound() {
