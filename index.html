@@ -3061,7 +3061,9 @@ function copyPublicLink() {
   };
   const json = JSON.stringify(data);
   const encoded = btoa(unescape(encodeURIComponent(json)));
-  const url = location.origin + location.pathname + '?v=' + encoded;
+  // Standard Base64 can contain "+". In a query string URLSearchParams decodes
+  // "+" as a space, so the payload must be percent-encoded before sharing.
+  const url = location.origin + location.pathname + '?v=' + encodeURIComponent(encoded);
   navigator.clipboard.writeText(url).then(() => {
     toast('success', 'Link copiado!', 'Compartilhe o link para que outros acompanhem rodadas e classificação.');
   }).catch(() => {
@@ -3081,7 +3083,8 @@ function trySpectatorMode() {
   const v = params.get('v');
   if (!v) return false;
   try {
-    const json = decodeURIComponent(escape(atob(v)));
+    // Also recover legacy links that embedded raw Base64 "+" characters.
+    const json = decodeURIComponent(escape(atob(v.replace(/ /g, '+'))));
     const data = JSON.parse(json);
     // Load into tournament object
     tournament.name = data.n || 'Torneio';
