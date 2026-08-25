@@ -1781,7 +1781,7 @@ function computePointsByRound(pid) {
   for (const rnd of tournament.rounds) {
     let rndPts = 0;
     for (const pair of rnd.pairs) {
-      if (pair.bye === pid) { rndPts = tournament.pointsWin; break; }
+      if (pair.bye === pid) { if (pair.result !== 'wo') rndPts = tournament.pointsWin; break; }
       if (pair.white === pid) {
         if (pair.result === '1-0') rndPts = tournament.pointsWin;
         else if (pair.result === '0.5-0.5') rndPts = tournament.pointsDraw;
@@ -1811,7 +1811,7 @@ function getRankingList() {
     }
     for (const rnd of tournament.rounds) {
       for (const pair of rnd.pairs) {
-        if (pair.bye === p.id) { pts += tournament.pointsWin; wins++; break; }
+        if (pair.bye === p.id) { if (pair.result !== 'wo') { pts += tournament.pointsWin; wins++; } break; }
         if (pair.white === p.id) {
           if (pair.result === '1-0')       { pts += tournament.pointsWin;  wins++; }
           else if (pair.result === '0.5-0.5') pts += tournament.pointsDraw;
@@ -2074,6 +2074,13 @@ function generateNextRound() {
     pairs = generateRoundRobinRoundPairings(nextIdx);
   } else {
     pairs = generateSwissPairings();
+    // Add W.O. entries for withdrawn players so they appear in the round
+    const nextRoundNum = nextIdx + 1; // 1-based
+    tournament.players.forEach(p => {
+      if (p.withdrawn) {
+        pairs.push({ bye: p.id, result: 'wo' });
+      }
+    });
   }
   tournament.rounds.push({ number: nextIdx + 1, pairs });
   tournament.currentRoundIndex = nextIdx;
@@ -2346,7 +2353,7 @@ function exportRoundsResults() {
     text += `RODADA ${rnd.number}\n${'-'.repeat(30)}\n`;
     for (const pair of rnd.pairs) {
       if (pair.bye) {
-        text += `BYE: ${playerName(pair.bye)}\n`;
+        text += pair.result === 'wo' ? `W.O.: ${playerName(pair.bye)} (desistente)\n` : `BYE: ${playerName(pair.bye)}\n`;
       } else {
         text += `${playerName(pair.white)} vs ${playerName(pair.black)} — ${pair.result || '?'}\n`;
       }
@@ -2585,7 +2592,7 @@ function renderDashboard() {
     ? (tournament.players.length % 2 === 0 ? tournament.players.length - 1 : tournament.players.length)
     : tournament.totalRounds;
   const currentRound = tournament.currentRoundIndex + 1;
-  const played = tournament.rounds.reduce((sum, rnd) => sum + rnd.pairs.filter(p => p.result || p.bye).length, 0);
+  const played = tournament.rounds.reduce((sum, rnd) => sum + rnd.pairs.filter(p => (p.result && p.result !== 'wo') || (p.bye && p.result !== 'wo')).length, 0);
   const totalPairs = tournament.rounds.reduce((sum, rnd) => sum + rnd.pairs.filter(p => !p.bye).length, 0);
   const systemLabel = tournament.system === 'roundrobin' ? 'Todos × Todos' : 'Sistema Suíço';
 
@@ -2789,12 +2796,13 @@ function renderPairings() {
     rnd.pairs.forEach((pair, pi) => {
       if (pair.bye) {
         const bp = tournament.players.find(p => p.id === pair.bye);
-        html += `<div class="glass-card no-hover matchup-card">
-          <div class="matchup-board-no">BYE</div>
+        const isWO = pair.result === 'wo';
+        html += `<div class="glass-card no-hover matchup-card"${isWO ? ' style="opacity:0.5;"' : ''}>
+          <div class="matchup-board-no">${isWO ? 'W.O.' : 'BYE'}</div>
           <div style="flex:1;color:var(--text-secondary);font-size:0.875rem;">
             ${bp ? `<div class="player-info"><div class="player-avatar">${bp.name[0]}</div><span class="player-name-cell">${bp.name}</span></div>` : ''}
           </div>
-          <div style="color:var(--status-win);font-size:0.8rem;font-weight:600;">✓ BYE (${tournament.pointsWin} pt)</div>
+          <div style="color:${isWO ? 'var(--status-loss)' : 'var(--status-win)'};font-size:0.8rem;font-weight:600;">${isWO ? '✗ W.O. (0 pt)' : `✓ BYE (${tournament.pointsWin} pt)`}</div>
         </div>`;
       } else {
         const pw = tournament.players.find(p => p.id === pair.white);
@@ -2988,12 +2996,12 @@ function copyPublicLink() {
     pl: tournament.pointsLoss,
     p: tournament.players.map(pl => ({
       i: pl.id, n: pl.name, r: pl.rating || 0, t: pl.title || '',
-      w: pl.withdrawn || false, le: pl.lateEntry || false, ler: pl.lateEntryRound || 0
+      w: pl.withdrawn || false, war: pl.withdrawnAtRound || 0, le: pl.lateEntry || false, ler: pl.lateEntryAtRound || 0, lep: pl.lateEntryPoints || 0
     })),
     rd: tournament.rounds.map(rnd => ({
       num: rnd.number,
       pairs: rnd.pairs.map(pr => {
-        if (pr.bye) return { b: pr.bye };
+        if (pr.bye) return pr.result === 'wo' ? { b: pr.bye, res: 'wo' } : { b: pr.bye };
         return { w: pr.white, k: pr.black, res: pr.result || '' };
       })
     })),
@@ -3034,13 +3042,13 @@ function trySpectatorMode() {
     tournament.pointsLoss = data.pl ?? 0;
     tournament.players = data.p.map(pl => ({
       id: pl.i, name: pl.n, rating: pl.r, title: pl.t,
-      withdrawn: pl.w || false, lateEntry: pl.le || false, lateEntryRound: pl.ler || 0,
+      withdrawn: pl.w || false, withdrawnAtRound: pl.war || 0, lateEntry: pl.le || false, lateEntryAtRound: pl.ler || 0, lateEntryPoints: pl.lep || 0,
       pairingNumber: 0
     }));
     tournament.rounds = data.rd.map(rnd => ({
       number: rnd.num,
       pairs: rnd.pairs.map(pr => {
-        if (pr.b) return { bye: pr.b };
+        if (pr.b) return pr.res === 'wo' ? { bye: pr.b, result: 'wo' } : { bye: pr.b, result: null };
         return { white: pr.w, black: pr.k, result: pr.res || null };
       })
     }));
@@ -3097,12 +3105,13 @@ function renderSpectatorPairings() {
     rnd.pairs.forEach((pair, pi) => {
       if (pair.bye) {
         const bp = tournament.players.find(p => p.id === pair.bye);
-        html += `<div class="glass-card no-hover matchup-card">
-          <div class="matchup-board-no">BYE</div>
+        const isWO = pair.result === 'wo';
+        html += `<div class="glass-card no-hover matchup-card"${isWO ? ' style="opacity:0.5;"' : ''}>
+          <div class="matchup-board-no">${isWO ? 'W.O.' : 'BYE'}</div>
           <div style="flex:1;color:var(--text-secondary);font-size:0.875rem;">
             ${bp ? `<div class="player-info"><div class="player-avatar">${bp.name[0]}</div><span class="player-name-cell">${bp.name}</span></div>` : ''}
           </div>
-          <div style="color:var(--status-win);font-size:0.8rem;font-weight:600;">✓ BYE (${tournament.pointsWin} pt)</div>
+          <div style="color:${isWO ? 'var(--status-loss)' : 'var(--status-win)'};font-size:0.8rem;font-weight:600;">${isWO ? '✗ W.O. (0 pt)' : `✓ BYE (${tournament.pointsWin} pt)`}</div>
         </div>`;
       } else {
         const pw = tournament.players.find(p => p.id === pair.white);
