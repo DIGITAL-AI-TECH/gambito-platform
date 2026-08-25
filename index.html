@@ -1963,6 +1963,9 @@ function pairScoreGroup(group, floaters) {
 
 function generateSwissPairings() {
   const nextRoundNum = tournament.currentRoundIndex + 2; // 1-based round about to be generated
+  const withdrawnPairings = tournament.players
+    .filter(p => p.withdrawn)
+    .map(p => ({ bye: p.id, result: 'wo' }));
   const list = getRankingList().filter(p => {
     // Exclude withdrawn players
     if (p.withdrawn) return false;
@@ -1989,10 +1992,10 @@ function generateSwissPairings() {
   let floaters = [];
   for (const grp of groups) {
     const eligible = grp.players.filter(p => !usedIds.has(p.id));
-    const combined = [...floaters, ...eligible];
+    const incomingFloaters = floaters;
     floaters = [];
-    if (combined.length === 0) continue;
-    const { pairs, unmatched } = pairScoreGroup(eligible, floaters.length ? floaters : []);
+    if (incomingFloaters.length === 0 && eligible.length === 0) continue;
+    const { pairs, unmatched } = pairScoreGroup(eligible, incomingFloaters);
     pairs.forEach(p => { usedIds.add(p.white); usedIds.add(p.black); allPairs.push(p); });
     floaters = unmatched.filter(p => !usedIds.has(p.id));
   }
@@ -2005,7 +2008,7 @@ function generateSwissPairings() {
     }
   }
   if (byePlayer) allPairs.push({ bye: byePlayer.id, result: null });
-  return allPairs;
+  return [...allPairs, ...withdrawnPairings];
 }
 
 function buildRoundRobinSchedule(players) {
@@ -2103,13 +2106,6 @@ function generateNextRound() {
     pairs = generateRoundRobinRoundPairings(nextIdx);
   } else {
     pairs = generateSwissPairings();
-    // Add W.O. entries for withdrawn players so they appear in the round
-    const nextRoundNum = nextIdx + 1; // 1-based
-    tournament.players.forEach(p => {
-      if (p.withdrawn) {
-        pairs.push({ bye: p.id, result: 'wo' });
-      }
-    });
   }
   tournament.rounds.push({ number: nextIdx + 1, pairs });
   tournament.currentRoundIndex = nextIdx;
