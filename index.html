@@ -2000,14 +2000,39 @@ function generateSwissPairings() {
     floaters = unmatched.filter(p => !usedIds.has(p.id));
   }
   // pair remaining floaters
-  if (floaters.length >= 2) {
+  while (floaters.length >= 2) {
     const fp = tryPerfectMatching(floaters);
     if (fp) {
-      fp.forEach(p => allPairs.push(p));
+      fp.forEach(p => { usedIds.add(p.white); usedIds.add(p.black); allPairs.push(p); });
       floaters = [];
+    } else {
+      // Perfect matching failed — force-pair the last two floaters regardless of history
+      const a = floaters.pop(), b = floaters.pop();
+      const [white, black] = decideColors(a.id, b.id);
+      allPairs.push({ white, black, result: null });
+      usedIds.add(a.id); usedIds.add(b.id);
+    }
+  }
+  // Single remaining floater gets BYE (if no byePlayer assigned yet) or forced BYE
+  if (floaters.length === 1) {
+    const loner = floaters[0];
+    if (!byePlayer) {
+      byePlayer = loner; // will be added below
+    } else {
+      // Both byePlayer and a leftover floater — give floater a separate BYE
+      allPairs.push({ bye: loner.id, result: null });
+      usedIds.add(loner.id);
     }
   }
   if (byePlayer) allPairs.push({ bye: byePlayer.id, result: null });
+
+  // Safety net: ensure every active (non-withdrawn, non-late-entry) player appears in the round
+  for (const p of list) {
+    if (!usedIds.has(p.id) && p.id !== (byePlayer && byePlayer.id)) {
+      allPairs.push({ bye: p.id, result: null }); // emergency BYE — should not normally happen
+    }
+  }
+
   return [...allPairs, ...withdrawnPairings];
 }
 
