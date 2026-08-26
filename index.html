@@ -1901,14 +1901,14 @@ function violatesAbsoluteColorRule(pid, asWhite) {
   // Add the proposed color
   colors.push(asWhite ? 'W' : 'B');
 
-  // A1: No 3 consecutive same color (scanning entire history)
+  // A1: No 3 consecutive same color (scanning entire history, not just trailing)
   let consecutive = 1;
-  for (let i = colors.length - 2; i >= 0; i--) {
-    if (colors[i] === colors[i + 1]) {
+  for (let i = 1; i < colors.length; i++) {
+    if (colors[i] === colors[i - 1]) {
       consecutive++;
       if (consecutive >= 3) return true;
     } else {
-      break;
+      consecutive = 1;
     }
   }
 
@@ -1963,10 +1963,11 @@ function decideColors(pid1, pid2) {
   const vb2 = violatesAbsoluteColorRule(pid2, false);
 
   // If one player CANNOT play a color, assign accordingly
-  if (vw1 && !vb2) return [pid2, pid1]; // pid1 must be black
-  if (vb1 && !vw2) return [pid1, pid2]; // pid1 must be white
-  if (vw2 && !vb1) return [pid1, pid2]; // pid2 must be black
-  if (vb2 && !vw1) return [pid2, pid1]; // pid2 must be white
+  // Check that the OTHER player CAN play the color they'll be assigned
+  if (vw1 && !vw2) return [pid2, pid1]; // pid1 must be black, pid2 can be white
+  if (vb1 && !vb2) return [pid1, pid2]; // pid1 must be white, pid2 can be black
+  if (vw2 && !vw1) return [pid1, pid2]; // pid2 must be black, pid1 can be white
+  if (vb2 && !vb1) return [pid2, pid1]; // pid2 must be white, pid1 can be black
 
   // Both players have absolute constraints — pick the least harmful option
   if (vw1 || vb1 || vw2 || vb2) {
@@ -2201,6 +2202,60 @@ function generateSwissPairings() {
     }
   }
   if (byePlayer) allPairs.push({ bye: byePlayer.id, result: null });
+
+  // Post-processing: fix color violations by swapping players between pairs
+  for (let pi = 0; pi < allPairs.length; pi++) {
+    const pair = allPairs[pi];
+    if (pair.bye || pair.result === 'wo') continue;
+    // Check if this pair has an A1 violation
+    const vwW = violatesAbsoluteColorRule(pair.white, true);
+    const vbB = violatesAbsoluteColorRule(pair.black, false);
+    if (!vwW && !vbB) continue; // no violation in current orientation
+    // Try swapping orientation first
+    const vwB = violatesAbsoluteColorRule(pair.white, false);
+    const vbW = violatesAbsoluteColorRule(pair.black, true);
+    if (!vbW && !vwB) {
+      // Swap orientation fixes it
+      const tmp = pair.white; pair.white = pair.black; pair.black = tmp;
+      continue;
+    }
+    // Try swapping a player with someone from another pair
+    let fixed = false;
+    for (let pj = 0; pj < allPairs.length && !fixed; pj++) {
+      if (pi === pj) continue;
+      const other = allPairs[pj];
+      if (other.bye || other.result === 'wo') continue;
+      // Try: swap pair[i].white with other.white
+      // New pair[i]: (other.white, pair[i].black), other: (pair[i].white, other.black)
+      if (!violatesAbsoluteColorRule(other.white, true) && !violatesAbsoluteColorRule(pair.black, false) &&
+          !violatesAbsoluteColorRule(pair.white, true) && !violatesAbsoluteColorRule(other.black, false) &&
+          !havePlayed(other.white, pair.black) && !havePlayed(pair.white, other.black)) {
+        const tmpW = pair.white; pair.white = other.white; other.white = tmpW;
+        fixed = true; break;
+      }
+      // Try: swap pair[i].white with other.black
+      if (!violatesAbsoluteColorRule(other.black, true) && !violatesAbsoluteColorRule(pair.black, false) &&
+          !violatesAbsoluteColorRule(pair.white, false) && !violatesAbsoluteColorRule(other.white, true) &&
+          !havePlayed(other.black, pair.black) && !havePlayed(pair.white, other.white)) {
+        const tmpW = pair.white; pair.white = other.black; other.black = tmpW;
+        fixed = true; break;
+      }
+      // Try: swap pair[i].black with other.white
+      if (!violatesAbsoluteColorRule(pair.white, true) && !violatesAbsoluteColorRule(other.white, false) &&
+          !violatesAbsoluteColorRule(other.black, false) && !violatesAbsoluteColorRule(pair.black, true) &&
+          !havePlayed(pair.white, other.white) && !havePlayed(other.black, pair.black)) {
+        const tmpB = pair.black; pair.black = other.white; other.white = tmpB;
+        fixed = true; break;
+      }
+      // Try: swap pair[i].black with other.black
+      if (!violatesAbsoluteColorRule(pair.white, true) && !violatesAbsoluteColorRule(other.black, false) &&
+          !violatesAbsoluteColorRule(other.white, true) && !violatesAbsoluteColorRule(pair.black, false) &&
+          !havePlayed(pair.white, other.black) && !havePlayed(other.white, pair.black)) {
+        const tmpB = pair.black; pair.black = other.black; other.black = tmpB;
+        fixed = true; break;
+      }
+    }
+  }
 
   // Safety net: ensure every active (non-withdrawn, non-late-entry) player appears in the round
   for (const p of list) {
