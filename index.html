@@ -1259,7 +1259,7 @@
       <button class="sidebar-btn" onclick="handleImportJSON()">📂 Importar JSON</button>
       <button class="sidebar-btn" onclick="exportJSON()">💾 Exportar JSON</button>
       <button class="sidebar-btn" onclick="exportRoundsResults()">📋 Exportar Resultados</button>
-      <button class="sidebar-btn" onclick="shareStandings()">📊 Classificação (txt)</button>
+      <button class="sidebar-btn" onclick="exportStandingsTXT()">📊 Classificação (txt)</button>
       <button class="sidebar-btn" onclick="copyPublicLink()">🔗 Link Público</button>
     </div>
   </aside>
@@ -2649,13 +2649,18 @@ function exportRoundsResults() {
 
 function shareStandings() {
   const sorted = sortPlayersByStandings(getRankingList());
+  const currentRatings = computeCurrentRatings();
   const tbOrder = getActiveTiebreakOrder();
-  const headers = ['Pos','Nome','Rating','Título','Pontos','Status'];
+  const headers = ['Pos','Nome','Rating Inicial','Rating Atual','Variação','Título','Pontos','Status'];
   for (const k of tbOrder) headers.push(TIEBREAK_LABELS[k].abbr);
   const rows = [headers.join(';')];
   sorted.forEach((p, i) => {
     const status = p.withdrawn ? 'Desistente' : (p.lateEntry ? 'Entrada tardia' : '');
-    const cols = [i+1, p.name, p.rating || '', p.title || '', p.points, status];
+    const initial = p.rating || 1500;
+    const current = currentRatings[p.id] || initial;
+    const delta = current - initial;
+    const deltaStr = delta > 0 ? '+' + delta : '' + delta;
+    const cols = [i+1, p.name, initial, current, deltaStr, p.title || '', p.points, status];
     for (const k of tbOrder) cols.push(formatTBValue(getTiebreakValue(p.id, k)));
     rows.push(cols.join(';'));
   });
@@ -2666,6 +2671,40 @@ function shareStandings() {
   a.href = url; a.download = `gambito_classificacao_${tournament.name || 'torneio'}.csv`;
   a.click(); URL.revokeObjectURL(url);
   toast('success', 'CSV exportado', 'Classificação salva como CSV.');
+}
+
+function exportStandingsTXT() {
+  const sorted = sortPlayersByStandings(getRankingList());
+  const currentRatings = computeCurrentRatings();
+  const tbOrder = getActiveTiebreakOrder();
+  let text = `GAMBITO — ${tournament.name || 'Torneio'}\n`;
+  text += `CLASSIFICAÇÃO FINAL\n`;
+  text += '='.repeat(70) + '\n\n';
+  // Header
+  const posW = 4, nameW = 25, ratW = 12, curW = 12, ptsW = 7;
+  text += 'Pos'.padEnd(posW) + 'Nome'.padEnd(nameW) + 'Rat.Ini'.padStart(ratW) + 'Rat.Atu'.padStart(curW) + 'Pts'.padStart(ptsW);
+  for (const k of tbOrder) text += ('  ' + TIEBREAK_LABELS[k].abbr).padStart(8);
+  text += '\n' + '-'.repeat(70) + '\n';
+  sorted.forEach((p, i) => {
+    const initial = p.rating || 1500;
+    const current = currentRatings[p.id] || initial;
+    const delta = current - initial;
+    const deltaStr = delta > 0 ? '(+' + delta + ')' : delta < 0 ? '(' + delta + ')' : '(±0)';
+    let line = String(i + 1).padEnd(posW);
+    line += (p.name + (p.withdrawn ? ' *' : '')).padEnd(nameW).slice(0, nameW);
+    line += String(initial).padStart(ratW);
+    line += (String(current) + ' ' + deltaStr).padStart(curW + deltaStr.length + 1);
+    line += String(p.points).padStart(ptsW);
+    for (const k of tbOrder) line += String(formatTBValue(getTiebreakValue(p.id, k))).padStart(8);
+    text += line + '\n';
+  });
+  text += '\n* = desistente\n';
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `gambito_classificacao_${tournament.name || 'torneio'}.txt`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('success', 'TXT exportado', 'Classificação salva como arquivo de texto.');
 }
 
 function exportPlayersCSV() {
