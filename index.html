@@ -1842,10 +1842,23 @@ function buildScoreGroups(list) {
   return Object.entries(groups).sort((a,b) => parseFloat(b[0]) - parseFloat(a[0])).map(([score,players]) => ({ score: parseFloat(score), players }));
 }
 
+function isRealGame(pair) {
+  // BYE and W.O. pairs don't count for color balance
+  if (pair.bye) return false;
+  if (pair.result === 'wo') return false;
+  // Check if either player was withdrawn (W.O. game)
+  const wp = tournament.players.find(p => p.id === pair.white);
+  const bp = tournament.players.find(p => p.id === pair.black);
+  if (wp && wp.withdrawn) return false;
+  if (bp && bp.withdrawn) return false;
+  return true;
+}
+
 function colorBalance(pid) {
   let balance = 0;
   for (const rnd of tournament.rounds) {
     for (const pair of rnd.pairs) {
+      if (!isRealGame(pair)) continue;
       if (pair.white === pid) balance++;
       if (pair.black === pid) balance--;
     }
@@ -1853,51 +1866,191 @@ function colorBalance(pid) {
   return balance;
 }
 
-function violatesAbsoluteColorRule(pid, asWhite) {
-  let consecutive = 0;
+function consecutiveSameColor(pid) {
+  // Returns how many consecutive rounds the player had the same color (from most recent)
+  // Positive = consecutive white, negative = consecutive black, 0 = none
+  let count = 0;
+  let lastColor = null;
   for (let i = tournament.rounds.length - 1; i >= 0; i--) {
-    let found = false;
+    let foundColor = null;
     for (const pair of tournament.rounds[i].pairs) {
-      if (pair.white === pid) { if (asWhite) consecutive++; else consecutive = 0; found = true; break; }
-      if (pair.black === pid) { if (!asWhite) consecutive++; else consecutive = 0; found = true; break; }
+      if (!isRealGame(pair)) continue;
+      if (pair.white === pid) { foundColor = 'white'; break; }
+      if (pair.black === pid) { foundColor = 'black'; break; }
     }
-    if (!found) break;
-    if (consecutive >= 2) return true;
+    if (!foundColor) continue; // BYE/W.O. round — skip, don't break streak
+    if (lastColor === null) { lastColor = foundColor; count = 1; }
+    else if (foundColor === lastColor) { count++; }
+    else break;
   }
+  return lastColor === 'white' ? count : -count;
+}
+
+function violatesAbsoluteColorRule(pid, asWhite) {
+  // Build color history (skipping BYE/W.O. rounds)
+  const colors = [];
+  for (let i = 0; i < tournament.rounds.length; i++) {
+    let foundColor = null;
+    for (const pair of tournament.rounds[i].pairs) {
+      if (!isRealGame(pair)) continue;
+      if (pair.white === pid) { foundColor = 'W'; break; }
+      if (pair.black === pid) { foundColor = 'B'; break; }
+    }
+    if (foundColor) colors.push(foundColor);
+  }
+  // Add the proposed color
+  colors.push(asWhite ? 'W' : 'B');
+
+  // A1: No 3 consecutive same color (scanning entire history)
+  let consecutive = 1;
+  for (let i = colors.length - 2; i >= 0; i--) {
+    if (colors[i] === colors[i + 1]) {
+      consecutive++;
+      if (consecutive >= 3) return true;
+    } else {
+      break;
+    }
+  }
+
+  // A2: Balance must not exceed +2 or -2
+  const bal = colorBalance(pid);
+  const newBal = asWhite ? bal + 1 : bal - 1;
+  if (newBal > 2 || newBal < -2) return true;
+
   return false;
 }
 
-function colorPreference(pid) {
+function colorPreferenceDetailed(pid) {
+  // Returns { color: 'white'|'black'|'none', strength: 'absolute'|'strong'|'mild' }
   const bal = colorBalance(pid);
-  if (bal > 0) return 'black';
-  if (bal < 0) return 'white';
-  // last color
+  const consec = consecutiveSameColor(pid);
+
+  // Strong preference: balance >= +2 or <= -2 (MUST get opposite)
+  if (bal >= 2) return { color: 'black', strength: 'strong' };
+  if (bal <= -2) return { color: 'white', strength: 'strong' };
+
+  // Strong preference: 2 consecutive same color (MUST get opposite — S2)
+  if (consec >= 2) return { color: 'black', strength: 'strong' };
+  if (consec <= -2) return { color: 'white', strength: 'strong' };
+
+  // Mild preference based on balance
+  if (bal > 0) return { color: 'black', strength: 'mild' };
+  if (bal < 0) return { color: 'white', strength: 'mild' };
+
+  // Balance = 0: alternate from last color (M1)
   for (let i = tournament.rounds.length - 1; i >= 0; i--) {
     for (const pair of tournament.rounds[i].pairs) {
-      if (pair.white === pid) return 'black';
-      if (pair.black === pid) return 'white';
+      if (!isRealGame(pair)) continue;
+      if (pair.white === pid) return { color: 'black', strength: 'mild' };
+      if (pair.black === pid) return { color: 'white', strength: 'mild' };
     }
   }
-  return 'none';
+  return { color: 'none', strength: 'mild' };
+}
+
+function colorPreference(pid) {
+  // Backwards-compatible wrapper
+  return colorPreferenceDetailed(pid).color;
 }
 
 function decideColors(pid1, pid2) {
-  const pref1 = colorPreference(pid1);
-  const pref2 = colorPreference(pid2);
+  // FIDE Dutch System color allocation hierarchy
+
+  // Step 1: Absolute rules (A1, A2) — NEVER violate
   const vw1 = violatesAbsoluteColorRule(pid1, true);
   const vb1 = violatesAbsoluteColorRule(pid1, false);
   const vw2 = violatesAbsoluteColorRule(pid2, true);
   const vb2 = violatesAbsoluteColorRule(pid2, false);
-  if (vw1 || vb2) return [pid2, pid1];
-  if (vb1 || vw2) return [pid1, pid2];
-  if (pref1 === 'white' && pref2 !== 'white') return [pid1, pid2];
-  if (pref2 === 'white' && pref1 !== 'white') return [pid2, pid1];
+
+  // If one player CANNOT play a color, assign accordingly
+  if (vw1 && !vb2) return [pid2, pid1]; // pid1 must be black
+  if (vb1 && !vw2) return [pid1, pid2]; // pid1 must be white
+  if (vw2 && !vb1) return [pid1, pid2]; // pid2 must be black
+  if (vb2 && !vw1) return [pid2, pid1]; // pid2 must be white
+
+  // Both players have absolute constraints — pick the least harmful option
+  if (vw1 || vb1 || vw2 || vb2) {
+    // Try pid1=white (if pid1 CAN play white and pid2 CAN play black)
+    if (!vw1 && !vb2) return [pid1, pid2];
+    if (!vb1 && !vw2) return [pid2, pid1];
+    // Truly impossible — favor A1 (consecutive) over A2 (balance)
+    // Pick whichever assignment causes fewer consecutive violations
+    const con1 = consecutiveSameColor(pid1);
+    const con2 = consecutiveSameColor(pid2);
+    // pid1=white: con1 adds white streak, con2 adds black streak
+    const cost1w = (con1 > 0 ? con1 + 1 : 1) + (con2 < 0 ? Math.abs(con2) + 1 : 1);
+    const cost2w = (con1 < 0 ? Math.abs(con1) + 1 : 1) + (con2 > 0 ? con2 + 1 : 1);
+    return cost1w <= cost2w ? [pid1, pid2] : [pid2, pid1];
+  }
+
+  // Safety helper: ensure assignment doesn't violate absolute rules
+  function safeAssign(w, b) {
+    // Verify the assignment is safe
+    if (!violatesAbsoluteColorRule(w, true) && !violatesAbsoluteColorRule(b, false)) {
+      return [w, b];
+    }
+    // Try swapping
+    if (!violatesAbsoluteColorRule(b, true) && !violatesAbsoluteColorRule(w, false)) {
+      return [b, w];
+    }
+    // Both violate — return the proposed assignment (least bad)
+    return [w, b];
+  }
+
+  // Step 2: Check preferences with strength
+  const pref1 = colorPreferenceDetailed(pid1);
+  const pref2 = colorPreferenceDetailed(pid2);
+
+  // Strong preference takes priority over mild
+  if (pref1.strength === 'strong' && pref2.strength !== 'strong') {
+    return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+  }
+  if (pref2.strength === 'strong' && pref1.strength !== 'strong') {
+    return safeAssign(...(pref2.color === 'white' ? [pid2, pid1] : [pid1, pid2]));
+  }
+
+  // Both strong — resolve by greater imbalance
+  if (pref1.strength === 'strong' && pref2.strength === 'strong') {
+    if (pref1.color !== pref2.color) {
+      return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+    }
+    // Same strong preference — who has greater need?
+    const abs1 = Math.abs(colorBalance(pid1));
+    const abs2 = Math.abs(colorBalance(pid2));
+    if (abs1 > abs2) return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+    if (abs2 > abs1) return safeAssign(...(pref2.color === 'white' ? [pid2, pid1] : [pid1, pid2]));
+    // Equal balance — who has more consecutive?
+    const con1 = Math.abs(consecutiveSameColor(pid1));
+    const con2 = Math.abs(consecutiveSameColor(pid2));
+    if (con1 > con2) return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+    if (con2 > con1) return safeAssign(...(pref2.color === 'white' ? [pid2, pid1] : [pid1, pid2]));
+    // Equal consecutive — higher rating gets preference
+    const r1 = tournament.players.find(p=>p.id===pid1)?.rating||0;
+    const r2 = tournament.players.find(p=>p.id===pid2)?.rating||0;
+    if (r1 > r2) return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+    if (r2 > r1) return safeAssign(...(pref2.color === 'white' ? [pid2, pid1] : [pid1, pid2]));
+  }
+
+  // Step 3: Mild preferences
+  if (pref1.color !== 'none' && pref2.color !== 'none' && pref1.color !== pref2.color) {
+    return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+  }
+  if (pref1.color !== 'none' && pref2.color === 'none') {
+    return safeAssign(...(pref1.color === 'white' ? [pid1, pid2] : [pid2, pid1]));
+  }
+  if (pref2.color !== 'none' && pref1.color === 'none') {
+    return safeAssign(...(pref2.color === 'white' ? [pid2, pid1] : [pid1, pid2]));
+  }
+
+  // Same mild preference or both none — tiebreak by balance then pairing number
   const b1 = colorBalance(pid1), b2 = colorBalance(pid2);
-  if (b1 < b2) return [pid1, pid2];
-  if (b2 < b1) return [pid2, pid1];
+  if (b1 < b2) return safeAssign(pid1, pid2);
+  if (b2 < b1) return safeAssign(pid2, pid1);
+
+  // Final tiebreak: lower pairing number gets white (M3)
   const pn1 = tournament.players.find(p=>p.id===pid1)?.pairingNumber||0;
   const pn2 = tournament.players.find(p=>p.id===pid2)?.pairingNumber||0;
-  return pn1 < pn2 ? [pid1, pid2] : [pid2, pid1];
+  return safeAssign(...(pn1 < pn2 ? [pid1, pid2] : [pid2, pid1]));
 }
 
 function splitS1S2(group) {
@@ -1905,15 +2058,38 @@ function splitS1S2(group) {
   return [group.slice(0, mid), group.slice(mid)];
 }
 
+function wouldViolateBothAbsolute(pid1, pid2) {
+  // Check if pairing these two would force an absolute color violation for at least one
+  const vw1 = violatesAbsoluteColorRule(pid1, true);
+  const vb1 = violatesAbsoluteColorRule(pid1, false);
+  const vw2 = violatesAbsoluteColorRule(pid2, true);
+  const vb2 = violatesAbsoluteColorRule(pid2, false);
+  // pid1=white,pid2=black: need !vw1 && !vb2
+  // pid1=black,pid2=white: need !vb1 && !vw2
+  const canAssign1 = (!vw1 && !vb2); // pid1=W, pid2=B
+  const canAssign2 = (!vb1 && !vw2); // pid1=B, pid2=W
+  return !canAssign1 && !canAssign2;
+}
+
 function tryS1S2Matching(s1, s2, paired, allPlayers) {
   const pairs = [];
   const usedS2 = new Array(s2.length).fill(false);
+  const isFirstRound = tournament.rounds.length === 0;
   for (let i = 0; i < s1.length; i++) {
     let matched = false;
     for (let j = 0; j < s2.length; j++) {
       if (usedS2[j]) continue;
       if (havePlayed(s1[i].id, s2[j].id)) continue;
-      const [white, black] = decideColors(s1[i].id, s2[j].id);
+      // Skip pairs that would force absolute color violation
+      if (!isFirstRound && wouldViolateBothAbsolute(s1[i].id, s2[j].id)) continue;
+      let white, black;
+      if (isFirstRound) {
+        // R1: S1 (higher ranked) always gets white
+        white = s1[i].id;
+        black = s2[j].id;
+      } else {
+        [white, black] = decideColors(s1[i].id, s2[j].id);
+      }
       pairs.push({ white, black, result: null });
       usedS2[j] = true;
       matched = true;
